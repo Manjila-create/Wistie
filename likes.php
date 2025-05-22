@@ -90,7 +90,7 @@ $matches = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
                     </div>
                     <div class="match-actions">
                         <button class="action-btn chat-btn" onclick="location.href='chat.php?user_id=<?= $match['id'] ?>'">Chat</button>
-                        <button class="action-btn view-btn" onclick="location.href='profile.php?user_id=<?= $match['id'] ?>'">View Profile</button>
+                        <button class="action-btn view-btn" onclick="location.href='viewprofile.php?user_id=<?= $match['id'] ?>'">View Profile</button>
                     </div>
                 </div>
             <?php endforeach; ?>

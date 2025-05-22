@@ -15,21 +15,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['lik
     $action = $_POST['action'];
     $likedId = (int)$_POST['liked_id'];
     
-    // Record the swipe
-    $stmt = $conn->prepare("INSERT INTO likes (liker_id, liked_id) VALUES (?, ?)");
-    $stmt->bind_param("ii", $currentUserId, $likedId);
-    $stmt->execute();
-    
-    // Check for a match
-    $matchCheck = $conn->prepare("SELECT id FROM likes WHERE liker_id = ? AND liked_id = ?");
-    $matchCheck->bind_param("ii", $likedId, $currentUserId);
-    $matchCheck->execute();
-    $matchResult = $matchCheck->get_result();
-    
-    if ($matchResult->num_rows > 0) {
-        // It's a match!
-        $conn->query("INSERT INTO matches (user1_id, user2_id) VALUES ($currentUserId, $likedId)");
-        $_SESSION['new_match'] = $likedId;
+    // Only record right swipes (likes)
+    if ($action === 'right') {
+        // Record the swipe
+        $stmt = $conn->prepare("INSERT INTO likes (liker_id, liked_id) VALUES (?, ?)");
+        $stmt->bind_param("ii", $currentUserId, $likedId);
+        $stmt->execute();
+        
+        // Check for a match
+        $matchCheck = $conn->prepare("SELECT id FROM likes WHERE liker_id = ? AND liked_id = ?");
+        $matchCheck->bind_param("ii", $likedId, $currentUserId);
+        $matchCheck->execute();
+        $matchResult = $matchCheck->get_result();
+        
+        if ($matchResult->num_rows > 0) {
+           // Insert the match ensuring user1_id is always the smaller ID to avoid duplicates
+            $user1_id = min($currentUserId, $likedId);
+            $user2_id = max($currentUserId, $likedId);
+            
+            // Use INSERT IGNORE to prevent duplicate matches
+            $conn->query("INSERT IGNORE INTO matches (user1_id, user2_id) VALUES ($user1_id, $user2_id)");
+            
+            // Set session variable to show match notification
+            $_SESSION['new_match'] = $likedId;
+            
+            // If this is the second swipe (User B swiping on User A), show the match to User B
+            if (isset($_SESSION['new_match_check']) && $likedId == $_SESSION['new_match_check']) {
+                $_SESSION['show_match_notification'] = true;
+            } else {
+                // For the first swipe (User A swiping on User B), store for potential future match
+                $_SESSION['new_match_check'] = $likedId;
+            }
+        }
     }
     
     exit();
@@ -131,7 +148,7 @@ $users = $result->fetch_all(MYSQLI_ASSOC);
     .star-nav {
       width:275px;
       height:33px;
-      margin-top:39%;
+      margin-top:38%;
        margin-left: 0px;
        margin-right: 100px;
       padding-right: 100px;
@@ -144,6 +161,7 @@ $users = $result->fetch_all(MYSQLI_ASSOC);
       font-size: 25px;
       cursor: pointer;
       transition: transform 0.3s;
+      gap:100px;
     }
     
     .star-nav button:hover {
@@ -313,9 +331,69 @@ $users = $result->fetch_all(MYSQLI_ASSOC);
     margin-top: 15px;
     cursor: pointer;
     }
+    /* Match Popup Styles */
+.match-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.match-content {
+    background: white;
+    padding: 30px;
+    border-radius: 20px;
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+    animation: popIn 0.5s;
+}
+
+.match-title {
+    color: #ff4e74;
+    margin-bottom: 15px;
+    font-size: 28px;
+}
+
+.match-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+@keyframes popIn {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Confetti canvas */
+#confetti-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 999;
+}
   </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.4.0/dist/confetti.browser.min.js"></script>
+<canvas id="confetti-canvas"></canvas>
 <body>
 
   <div class="topbar">
@@ -401,9 +479,7 @@ $users = $result->fetch_all(MYSQLI_ASSOC);
     <!-- <div class="star-sidebar"> -->
       <div class="star-nav">
          <button onclick="location.href='profile.php'"><i class="fas fa-user"></i></button>
-                <button onclick="location.href='feed.php'"><i class="fas fa-users"></i></button>
                 <button onclick="location.href='likes.php'"><i class="fas fa-heart"></i></button>
-                <button onclick="location.href='chat.php'"><i class="fas fa-comments"></i></button>
             <!-- </div> -->
         </div>
 
@@ -423,53 +499,137 @@ $users = $result->fetch_all(MYSQLI_ASSOC);
         // Swipe function
       let currentVisibleCardIndex = 0;
 
+// Update the swipe function in feed.php
 function swipe(direction, userId) {
-    const allCards = Array.from(document.querySelectorAll('.card'));
-    const currentCard = allCards.find(card => card.classList.contains('active'));
-    
-    if (!currentCard) return;
-    
-    fetch('feed.php', {
-        method: 'POST',
-        body: `action=${direction}&liked_id=${userId}`
-    }).then(() => {
-        // Animate swipe
-        currentCard.style.transform = `translateX(${direction === 'right' ? '100%' : '-100%'})`;
+    if (direction !== 'right') {
+        // Handle left swipe normally
+        const currentCard = document.querySelector('.card.active');
+        if (!currentCard) return;
+        
+        currentCard.style.transform = 'translateX(-100%)';
         currentCard.style.opacity = '0';
         
         setTimeout(() => {
-            currentCard.style.display = 'none';
-            currentVisibleCardIndex++;
-            
-            // Activate next card
-            const nextCard = allCards[currentVisibleCardIndex];
-            if (nextCard) {
-                nextCard.classList.add('active');
-                updateInfoPanel(nextCard.dataset.userId);
-            } else {
-                document.getElementById('cardContainer').innerHTML = `
-                    <div class="no-more">
-                        No more profiles available.<br>
-                        <button onclick="location.reload()">Check Again</button>
-                    </div>
-                `;
-            }
+            showNextCard();
         }, 300);
+        return;
+    }
+
+    fetch('feed.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `action=${direction}&liked_id=${userId}`
+    }).then(response => {
+        if (!response.ok) throw new Error('Network response was not ok');
+        return response.text();
+    }).then(() => {
+        const currentCard = document.querySelector('.card.active');
+        if (!currentCard) return;
+        
+        // Animate swipe right with heart animation
+        currentCard.style.transform = 'translateX(100%) rotate(10deg)';
+        currentCard.style.opacity = '0';
+        
+        // Create heart animation
+        const heart = document.createElement('div');
+        heart.style.position = 'absolute';
+        heart.style.left = '50%';
+        heart.style.top = '50%';
+        heart.style.transform = 'translate(-50%, -50%)';
+        heart.style.fontSize = '100px';
+        heart.style.color = '#ff4e74';
+        heart.style.opacity = '0';
+        heart.style.transition = 'all 0.5s';
+        heart.style.zIndex = '1000';
+        heart.innerHTML = '❤️';
+        document.body.appendChild(heart);
+        
+        setTimeout(() => {
+            heart.style.opacity = '1';
+            heart.style.transform = 'translate(-50%, -50%) scale(1.5)';
+        }, 10);
+        
+        setTimeout(() => {
+            heart.style.opacity = '0';
+            heart.style.transform = 'translate(-50%, -150%) scale(0.5)';
+            setTimeout(() => heart.remove(), 500);
+        }, 800);
+        
+        setTimeout(() => {
+            currentCard.style.display = 'none';
+            showNextCard();
+        }, 300);
+    }).catch(error => {
+        console.error('Error:', error);
     });
 }
 
-        // Check for new match
-        window.addEventListener('DOMContentLoaded', () => {
-            <?php if (isset($_SESSION['new_match'])): ?>
-                fetch('get_user.php?id=<?= $_SESSION['new_match'] ?>')
-                    .then(response => response.json())
-                    .then(user => {
-                        document.getElementById('matchedUserName').textContent = user.fullname;
-                        document.getElementById('matchPopup').style.display = 'flex';
-                    });
-                <?php unset($_SESSION['new_match']); ?>
-            <?php endif; ?>
-        });
+function showNextCard() {
+    const allCards = Array.from(document.querySelectorAll('.card'));
+    const currentIndex = allCards.findIndex(card => card.classList.contains('active'));
+    
+    if (currentIndex < allCards.length - 1) {
+        allCards[currentIndex + 1].classList.add('active');
+        updateInfoPanel(allCards[currentIndex + 1].dataset.userId);
+    } else {
+        document.getElementById('cardContainer').innerHTML = `
+            <div class="no-more">
+                No more profiles available.<br>
+                <button onclick="location.reload()">Check Again</button>
+            </div>
+        `;
+    }
+}
+
+// Enhanced match popup with animation
+window.addEventListener('DOMContentLoaded', () => {
+    <?php if (isset($_SESSION['new_match'])): ?>
+        // Show confetti animation
+        const confettiSettings = {
+            target: 'confetti-canvas',
+            max: 150,
+            size: 1.5,
+            animate: true,
+            props: ['circle', 'square', 'triangle', 'line'],
+            colors: [[255,78,116], [92,199,124], [255,235,59], [199,102,171]],
+            clock: 25,
+            rotate: true,
+            start_from_edge: true,
+            respawn: true
+        };
+        
+        const confetti = new ConfettiGenerator(confettiSettings);
+        confetti.render();
+        
+        fetch('get_user.php?id=<?= $_SESSION['new_match'] ?>')
+            .then(response => response.json())
+            .then(user => {
+                document.getElementById('matchedUserName').textContent = user.fullname;
+                
+                // Create match popup with animation
+                const popup = document.getElementById('matchPopup');
+                popup.style.display = 'flex';
+                popup.style.animation = 'popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+                
+                // Add user photo to popup
+                const photos = JSON.parse(user.photos || '[]');
+                if (photos.length > 0) {
+                    const img = document.createElement('img');
+                    img.src = photos[0];
+                    img.style.width = '100px';
+                    img.style.height = '100px';
+                    img.style.borderRadius = '50%';
+                    img.style.objectFit = 'cover';
+                    img.style.margin = '20px 0';
+                    document.querySelector('.match-content').insertBefore(img, document.querySelector('.match-buttons'));
+                }
+            });
+        
+        <?php unset($_SESSION['new_match']); ?>
+    <?php endif; ?>
+});
 
         function closeMatchPopup() {
             document.getElementById('matchPopup').style.display = 'none';

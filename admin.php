@@ -121,6 +121,7 @@ $result = $conn->query("SELECT * FROM users");
       <th>Photos</th>
       <th>Status</th>
       <th>Actions</th>
+      <th>.....</th>
     </tr>
   </thead>
   <tbody>

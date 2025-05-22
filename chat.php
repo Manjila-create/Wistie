@@ -8,212 +8,281 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $currentUserId = $_SESSION['user_id'];
-$otherUserId = $_GET['user_id'] ?? null;
+$otherUserId = $_GET['user_id'] ?? 0;
 
-// Verify they are matched
-if ($otherUserId) {
-    $stmt = $conn->prepare("SELECT id FROM matches 
-                           WHERE (user1_id = ? AND user2_id = ?) 
-                           OR (user1_id = ? AND user2_id = ?)");
-    $stmt->bind_param("iiii", $currentUserId, $otherUserId, $otherUserId, $currentUserId);
-    $stmt->execute();
-    
-    if ($stmt->get_result()->num_rows === 0) {
-        header("Location: likes.php");
-        exit();
-    }
-}
+// Verify this is a valid match
+$stmt = $conn->prepare("
+    SELECT 1 FROM matches 
+    WHERE (user1_id = ? AND user2_id = ?)
+    OR (user1_id = ? AND user2_id = ?)
+");
+$stmt->bind_param("iiii", $currentUserId, $otherUserId, $otherUserId, $currentUserId);
+$stmt->execute();
 
-// Handle message sending
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'], $_POST['receiver_id'])) {
-    $message = $_POST['message'];
-    $receiverId = (int)$_POST['receiver_id'];
-    
-    $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)");
-    $stmt->bind_param("iis", $currentUserId, $receiverId, $message);
-    $stmt->execute();
-    
-    header("Location: chat.php?user_id=$receiverId");
+if ($stmt->get_result()->num_rows === 0) {
+    header("Location: likes.php");
     exit();
 }
 
+// Get other user's info
+$stmt = $conn->prepare("SELECT fullname, photos FROM users WHERE id = ?");
+$stmt->bind_param("i", $otherUserId);
+$stmt->execute();
+$otherUser = $stmt->get_result()->fetch_assoc();
+$otherUserPhoto = json_decode($otherUser['photos'], true)[0] ?? 'default_profile.jpg';
+
+// Handle message submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
+    $message = trim($_POST['message']);
+    if (!empty($message)) {
+        $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, message) VALUES (?, ?, ?)");
+        $stmt->bind_param("iis", $currentUserId, $otherUserId, $message);
+        $stmt->execute();
+    }
+}
+
 // Get conversation history
-$messages = [];
-if ($otherUserId) {
-    $stmt = $conn->prepare("SELECT * FROM messages 
-                           WHERE (sender_id = ? AND receiver_id = ?) 
-                           OR (sender_id = ? AND receiver_id = ?) 
-                           ORDER BY sent_at ASC");
-    $stmt->bind_param("iiii", $currentUserId, $otherUserId, $otherUserId, $currentUserId);
-    $stmt->execute();
-    $messages = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-    
-    // Mark messages as read
-    $conn->query("UPDATE messages SET is_read = TRUE 
-                 WHERE receiver_id = $currentUserId AND sender_id = $otherUserId");
-}
-
-// Get all conversations
-$conversations = $conn->query("
-    SELECT users.id, users.fullname, users.photos, MAX(messages.sent_at) as last_message_time
-    FROM users
-    JOIN messages ON users.id = CASE 
-        WHEN messages.sender_id = $currentUserId THEN messages.receiver_id
-        ELSE messages.sender_id
-    END
-    WHERE $currentUserId IN (messages.sender_id, messages.receiver_id)
-    GROUP BY users.id
-    ORDER BY last_message_time DESC
-")->fetch_all(MYSQLI_ASSOC);
-
-// Get other user info if in conversation
-$otherUser = null;
-if ($otherUserId) {
-    $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
-    $stmt->bind_param("i", $otherUserId);
-    $stmt->execute();
-    $otherUser = $stmt->get_result()->fetch_assoc();
-}
+$stmt = $conn->prepare("
+    SELECT * FROM messages 
+    WHERE (sender_id = ? AND receiver_id = ?)
+    OR (sender_id = ? AND receiver_id = ?)
+    ORDER BY sent_at ASC
+");
+$stmt->bind_param("iiii", $currentUserId, $otherUserId, $otherUserId, $currentUserId);
+$stmt->execute();
+$messages = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Messages</title>
+    <title>Chat with <?= htmlspecialchars($otherUser['fullname']) ?></title>
     <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f5f6fa;
+        }
         .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
             display: flex;
-            max-width: 1200px;
-            margin: 20px auto;
-            height: 80vh;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            overflow: hidden;
+            flex-direction: column;
+            height: 100vh;
         }
-        .conversation-list {
-            width: 300px;
-            border-right: 1px solid #ddd;
-            overflow-y: auto;
-        }
-        .conversation {
+        .chat-header {
+            background: #ff4e74;
+            color: white;
             padding: 15px;
-            border-bottom: 1px solid #eee;
-            cursor: pointer;
             display: flex;
             align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
-        .conversation:hover {
-            background: #f9f9f9;
-        }
-        .conversation-img {
+        .chat-header img {
             width: 50px;
             height: 50px;
             border-radius: 50%;
+            margin-right: 15px;
             object-fit: cover;
-            margin-right: 10px;
         }
-        .chat-area {
+        .chat-messages {
             flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        .chat-header {
-            padding: 15px;
-            border-bottom: 1px solid #ddd;
-            text-align: center;
-            font-weight: bold;
-        }
-        .messages {
-            flex: 1;
-            padding: 15px;
+            padding: 20px;
             overflow-y: auto;
+            background: #f0f2f5;
         }
         .message {
             margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        .message.sent {
+            align-items: flex-end;
+        }
+        .message.received {
+            align-items: flex-start;
+        }
+        .message-content {
             max-width: 70%;
             padding: 10px 15px;
-            border-radius: 20px;
+            border-radius: 18px;
+            margin-bottom: 5px;
+            word-wrap: break-word;
         }
-        .sent {
-            background: #ff4e74;
-            color: white;
-            margin-left: auto;
-            border-bottom-right-radius: 5px;
+        .sent .message-content {
+            background: #dcf8c6;
+            border-top-right-radius: 0;
         }
-        .received {
-            background: #f0f0f0;
-            margin-right: auto;
-            border-bottom-left-radius: 5px;
+        .received .message-content {
+            background: white;
+            border-top-left-radius: 0;
         }
-        .message-form {
-            display: flex;
+        .message-time {
+            font-size: 12px;
+            color: #666;
+        }
+        .chat-input {
             padding: 15px;
+            background: white;
+            display: flex;
+            position: sticky;
+            bottom: 0;
             border-top: 1px solid #ddd;
         }
-        .message-input {
+        .chat-input textarea {
             flex: 1;
-            padding: 10px;
             border: 1px solid #ddd;
             border-radius: 20px;
-            margin-right: 10px;
+            padding: 10px 15px;
+            resize: none;
+            outline: none;
+            font-family: inherit;
+            font-size: 14px;
+            height: 40px;
+            max-height: 100px;
         }
-        .send-btn {
+        .chat-input button {
             background: #ff4e74;
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 20px;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+        .back-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            margin-right: 15px;
             cursor: pointer;
         }
     </style>
 </head>
 <body>
     <div class="chat-container">
-        <div class="conversation-list">
-            <h3 style="padding: 15px; margin: 0; border-bottom: 1px solid #ddd;">Conversations</h3>
-            <?php foreach ($conversations as $conv): 
-                $photos = json_decode($conv['photos'], true);
+        <div class="chat-header">
+            <button class="back-btn" onclick="window.history.back()">←</button>
+            <img src="<?= htmlspecialchars($otherUserPhoto) ?>" alt="<?= htmlspecialchars($otherUser['fullname']) ?>">
+            <h2><?= htmlspecialchars($otherUser['fullname']) ?></h2>
+        </div>
+        
+        <div class="chat-messages" id="messagesContainer">
+            <?php foreach ($messages as $message): 
+                $isSent = $message['sender_id'] == $currentUserId;
+                $time = date("h:i A", strtotime($message['sent_at']));
             ?>
-                <div class="conversation" onclick="location.href='chat.php?user_id=<?= $conv['id'] ?>'">
-                    <img src="<?= htmlspecialchars($photos[0]) ?>" class="conversation-img">
-                    <div>
-                        <div><?= htmlspecialchars($conv['fullname']) ?></div>
-                        <small><?= date('M j, g:i a', strtotime($conv['last_message_time'])) ?></small>
-                    </div>
+                <div class="message <?= $isSent ? 'sent' : 'received' ?>">
+                    <div class="message-content"><?= htmlspecialchars($message['message']) ?></div>
+                    <div class="message-time"><?= $time ?></div>
                 </div>
             <?php endforeach; ?>
         </div>
         
-        <?php if ($otherUserId && $otherUser): 
-            $otherPhotos = json_decode($otherUser['photos'], true);
-        ?>
-            <div class="chat-area">
-                <div class="chat-header">
-                    <?= htmlspecialchars($otherUser['fullname']) ?>
-                </div>
-                
-                <div class="messages">
-                    <?php foreach ($messages as $msg): ?>
-                        <div class="message <?= $msg['sender_id'] == $currentUserId ? 'sent' : 'received' ?>">
-                            <?= htmlspecialchars($msg['content']) ?>
-                            <div style="font-size: 12px; text-align: right; margin-top: 5px;">
-                                <?= date('g:i a', strtotime($msg['sent_at'])) ?>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-                
-                <form method="POST" class="message-form">
-                    <input type="hidden" name="receiver_id" value="<?= $otherUserId ?>">
-                    <input type="text" name="message" placeholder="Type a message..." class="message-input" required>
-                    <button type="submit" class="send-btn">Send</button>
-                </form>
-            </div>
-        <?php else: ?>
-            <div style="flex: 1; display: flex; justify-content: center; align-items: center;">
-                <p>Select a conversation to start chatting</p>
-            </div>
-        <?php endif; ?>
+        <form class="chat-input" method="POST" onsubmit="return sendMessage()">
+            <textarea name="message" id="messageInput" placeholder="Type a message..." required></textarea>
+            <button type="submit">→</button>
+        </form>
     </div>
+
+   <?php
+session_start();
+require 'db_connection.php';
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+$currentUserId = $_SESSION['user_id'];
+$otherUserId = $_GET['user_id'] ?? 0;
+
+// [Keep all your existing verification and message handling code]
+// Only updating the HTML/JS part
+?>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat with <?= htmlspecialchars($otherUser['fullname']) ?></title>
+    <style>
+        /* Keep all your existing styles exactly the same */
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <button class="back-btn" onclick="window.history.back()">←</button>
+            <img src="<?= htmlspecialchars($otherUserPhoto) ?>" alt="<?= htmlspecialchars($otherUser['fullname']) ?>">
+            <h2><?= htmlspecialchars($otherUser['fullname']) ?></h2>
+        </div>
+        
+        <div class="chat-messages" id="messagesContainer">
+            <?php foreach ($messages as $message): 
+                $isSent = $message['sender_id'] == $currentUserId;
+                $time = date("h:i A", strtotime($message['sent_at']));
+            ?>
+                <div class="message <?= $isSent ? 'sent' : 'received' ?>">
+                    <div class="message-content"><?= htmlspecialchars($message['message']) ?></div>
+                    <div class="message-time"><?= $time ?></div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        
+        <form class="chat-input" id="chatForm">
+            <textarea name="message" id="messageInput" placeholder="Type a message..." required></textarea>
+            <button type="submit">→</button>
+        </form>
+    </div>
+
+    <script>
+        // Auto-scroll to bottom
+        function scrollToBottom() {
+            const container = document.getElementById('messagesContainer');
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // Load new messages
+        function loadMessages() {
+            fetch(`get_messages.php?user_id=<?= $otherUserId ?>`)
+                .then(response => response.text())
+                .then(html => {
+                    document.getElementById('messagesContainer').innerHTML = html;
+                    scrollToBottom();
+                });
+        }
+        
+        // Send message via AJAX
+        document.getElementById('chatForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+            
+            if (message === '') return;
+            
+            fetch('chat.php?user_id=<?= $otherUserId ?>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `message=${encodeURIComponent(message)}`
+            })
+            .then(() => {
+                messageInput.value = '';
+                loadMessages(); // Refresh messages after sending
+            });
+        });
+        
+        // Poll for new messages every 2 seconds
+        setInterval(loadMessages, 2000);
+        
+        // Initial scroll to bottom
+        scrollToBottom();
+    </script>
 </body>
 </html>
