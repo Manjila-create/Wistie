@@ -1,3 +1,4 @@
+<!-- th is good -->
 <?php
 $servername = "localhost";
 $username = "root";
