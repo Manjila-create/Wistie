@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Wistie - Find Your Wish Buddy</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      font-family: Arial, sans-serif;
+      background: #fefefe;
+      color: #333;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #c766ab;
+      opacity: 0.9;
+      color: white;
+      padding: 20px;
+      position: fixed;
+      width: 100%;
+      top: 0;
+      left: 0;
+      z-index: 1000;
+      box-sizing: border-box;
+      flex-wrap: wrap;
+    }
+
+    .logo {
+      font-size: 1.8em;
+      font-weight: bold;
+      color: white;
+      font-family: 'Comic Sans MS', cursive, sans-serif;
+    }
+
+    .playful-w {
+      color: #ffeb3b;
+      font-size: 1.2em;
+      text-shadow: 2px 2px 0px #ff4081, -2px -2px 0px #7e57c2;
+      animation: bounce 1.2s infinite;
+      display: inline-block;
+    }
+
+    nav {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    nav a {
+      color: white;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    nav a:hover {
+      text-decoration: underline;
+    }
+
+    main {
+      flex: 1;
+      background-image: url('images/wistieBG.avif');
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 100px 20px 20px; /* padding-top to avoid header overlap */
+      box-sizing: border-box;
+    }
+
+    .main-content h1 {
+      font-size: 2.2em;
+      color: black;
+      margin-bottom: 10px;
+    }
+
+    .main-content p {
+      font-size: 1.1em;
+      color: black;
+    }
+
+    .cta-btn {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 12px 25px;
+      background: #9575cd;
+      color: white;
+      border-radius: 5px;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    footer {
+      text-align: center;
+      padding: 24px;
+      background: #a65990;
+      color: white;
+    }
+
+    /* Responsive Styles */
+    @media (max-width: 768px) {
+      .logo {
+        font-size: 1.5em;
+      }
+
+      nav {
+        width: 100%;
+        justify-content: center;
+        margin-top: 10px;
+      }
+
+      .main-content h1 {
+        font-size: 1.8em;
+      }
+
+      .main-content p {
+        font-size: 1em;
+      }
+
+      .cta-btn {
+        padding: 10px 20px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      nav {
+        justify-content: flex-start;
+        width: 100%;
+      }
+
+      .main-content h1 {
+        font-size: 1.6em;
+      }
+
+      .main-content p {
+        font-size: 0.95em;
+      }
+
+      .cta-btn {
+        padding: 8px 16px;
+        font-size: 0.95em;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo"><span class="playful-w">W</span>istie 🌟</div>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="register.php">Register</a>
+      <a href="login.php">Login</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="main-content">
+      <h1>Make friends based on your wishlist 🎁</h1>
+      <p>Wistie connects you with people who want the same things in life!</p>
+      <p>Find your wish buddy✨</p>
+      <a href="register.php" class="cta-btn">Get Started</a>
+    </div>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Wistie. All rights reserved.</p>
+  </footer>
+</body>
+</html>
