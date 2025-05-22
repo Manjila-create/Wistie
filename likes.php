@@ -45,6 +45,18 @@ $matches = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
             object-fit: cover;
             margin-right: 20px;
         }
+        .match-item {
+            padding: 15px;
+            margin: 10px 0;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        .match-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
         .match-info {
             flex: 1;
         }
@@ -74,27 +86,55 @@ $matches = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 <body>
     <div class="matches-container">
         <h1>Your Matches</h1>
+        <!-- Search bar -->
+        <div style="margin-bottom: 20px; display: flex; align-items: center;">
+            <input type="text" id="searchInput" placeholder="Search matches..." 
+                   style="padding: 10px; font-size: 16px; flex: 1; border-radius: 5px; border: 1px solid #ccc;">
+            <span style="margin-left: -35px; cursor: pointer;">🔍</span>
+        </div>
         
-        <?php if (empty($matches)): ?>
-            <p>You don't have any matches yet. Keep swiping!</p>
-        <?php else: ?>
-            <?php foreach ($matches as $match): 
-                $photos = json_decode($match['photos'], true);
-                $age = date_diff(date_create($match['dob']), date_create('today'))->y;
-            ?>
-                <div class="match-card">
-                    <img src="<?= htmlspecialchars($photos[0]) ?>" class="match-img">
-                    <div class="match-info">
-                        <div class="match-name"><?= htmlspecialchars($match['fullname']) ?></div>
-                        <div class="match-age"><?= $age ?> years</div>
+        <div id="matchesList">
+            <?php if (empty($matches)): ?>
+                <p>You don't have any matches yet. Keep swiping!</p>
+            <?php else: ?>
+                <?php foreach ($matches as $match): 
+                    $photos = json_decode($match['photos'], true);
+                    $age = date_diff(date_create($match['dob']), date_create('today'))->y;
+                ?>
+                    <div class="match-item">
+                        <div class="match-card">
+                            <img src="<?= htmlspecialchars($photos[0]) ?>" class="match-img">
+                            <div class="match-info">
+                                <div class="match-name"><?= htmlspecialchars($match['fullname']) ?></div>
+                                <div class="match-age"><?= $age ?> years</div>
+                            </div>
+                            <div class="match-actions">
+                                <button class="action-btn chat-btn" onclick="location.href='chat.php?user_id=<?= $match['id'] ?>'">Chat</button>
+                                <button class="action-btn view-btn" onclick="location.href='viewprofile.php?user_id=<?= $match['id'] ?>'">View Profile</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="match-actions">
-                        <button class="action-btn chat-btn" onclick="location.href='chat.php?user_id=<?= $match['id'] ?>'">Chat</button>
-                        <button class="action-btn view-btn" onclick="location.href='viewprofile.php?user_id=<?= $match['id'] ?>'">View Profile</button>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        <?php endif; ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
     </div>
+    
+    <script>
+        document.getElementById('searchInput').addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const matchItems = document.querySelectorAll('.match-item');
+            
+            matchItems.forEach(item => {
+                const nameElement = item.querySelector('.match-name');
+                const name = nameElement.textContent.toLowerCase();
+                
+                if (name.includes(searchTerm)) {
+                    item.style.display = '';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+    </script>
 </body>
 </html>
