@@ -240,14 +240,10 @@ $conn->close();
   <div class="img-slot"><span>+</span></div>
   <div class="img-slot"><span>+</span></div>
   <div class="img-slot"><span>+</span></div>
-  <div class="img-slot"><span>+</span></div>
-  <div class="img-slot"><span>+</span></div>
-  <div class="img-slot"><span>+</span></div>
 </div>
 
 <input type="file" name="photos[]" id="photos" accept="image/jpeg, image/png, image/webp" multiple required style="display: none;">
-<small style="color: #777;">Click a box to upload. 2–6 JPG/PNG/WEBP images allowed.</small>
-
+<small style="color: #777;">Click a box to upload. 2–3 JPG/PNG/WEBP images allowed.</small>
       <button type="submit">Register</button>
       <div class="note">Must be 16 years or older to join Wistie.</div>
     </form>
@@ -313,6 +309,9 @@ const imgSlots = document.querySelectorAll('.img-slot');
 const fileInput = document.getElementById('photos');
 let selectedFiles = [];
 
+// Define accepted image MIME types
+const acceptedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+
 imgSlots.forEach((slot, index) => {
   slot.addEventListener('click', () => {
     fileInput.click(); // open the file dialog
@@ -321,9 +320,19 @@ imgSlots.forEach((slot, index) => {
 
 fileInput.addEventListener('change', function () {
   const newFiles = Array.from(this.files);
-
+  
+  // Filter only image files
+  const validImageFiles = newFiles.filter(file => 
+    acceptedImageTypes.includes(file.type)
+  );
+  
+  // If any invalid files were selected, show alert
+  if (validImageFiles.length < newFiles.length) {
+    alert("Only image files (JPEG, PNG, GIF, WEBP, SVG) are allowed.");
+  }
+  
   // Combine existing and new files, but limit to 6
-  selectedFiles = [...selectedFiles, ...newFiles].slice(0, 6);
+  selectedFiles = [...selectedFiles, ...validImageFiles].slice(0, 6);
 
   // Update the file input to reflect only selectedFiles (required for backend upload)
   const dataTransfer = new DataTransfer();
@@ -345,10 +354,10 @@ fileInput.addEventListener('change', function () {
       slot.innerHTML = '<span>+</span>';
     }
   });
- if (selectedFiles.length < 2 || selectedFiles.length > 6) {
-    alert("Please select between 2 and 6 images.");
+  
+  if (selectedFiles.length < 2 || selectedFiles.length > 6) {
+    alert("Please select between 2 and 3 images.");
   }
-
 });
 </script>
 
